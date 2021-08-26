@@ -3,7 +3,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "${DIR}"
 set -e
 
-BASE_TAG="jedrzejlewandowski/pg-task-broker"
+BASE_TAG="jedrzejlewandowski/pg-task-broker-postgres"
 VERSION="1.0.0"
 
 docker build -t "${BASE_TAG}" .

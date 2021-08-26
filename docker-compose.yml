@@ -1,0 +1,10 @@
+version: "3.7"
+
+services:
+  task_broker:
+    build: ./postgres
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
