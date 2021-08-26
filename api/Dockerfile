@@ -10,6 +10,8 @@ EXPOSE 80
 WORKDIR /app
 ADD package.json package-lock.json /app/
 RUN npm ci
+
+ADD index.js /app
 RUN npm run build
 
 CMD npm run start
