@@ -7,7 +7,7 @@ CREATE TABLE tasks (
     timeout_ms INT DEFAULT 3600000,
     in_progress_expire_at BIGINT DEFAULT 0,
     retry_no INT DEFAULT 0,
-    msg NOT NULL LONGTEXT,
+    msg TEXT NOT NULL
 );
 
 CREATE INDEX tasks_in_progress_expire_at_idx ON tasks (in_progress_expire_at);
