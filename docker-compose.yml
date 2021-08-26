@@ -1,8 +1,17 @@
 version: "3.7"
 
 services:
-  task_broker:
-    build: ./postgres
+  task_broker_pg:
+    build: postgres
+    environment:
+      POSTGRES_PASSWORD: 39hqrac5nbWRGcr
+  task_broker_api:
+    build: api
+    environment:
+      POSTGRES_HOST: task_broker_pg
+      POSTGRES_PASSWORD: 39hqrac5nbWRGcr
+    ports:
+      - 3000:80
   adminer:
     image: adminer
     restart: always
