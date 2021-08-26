@@ -46,23 +46,35 @@ app.get(
   "/take",
   withErrorHandling(async function (req, res) {
     const queue = ensureDefined(req.query.queue, "?queue");
-    const result = await pool.query({
-      text:
-        "UPDATE tasks " +
-        "SET state_name = 'in_progress', " +
-        "in_progress_expire_at = extract(epoch from current_timestamp) * 1000 + extract(milliseconds from current_timestamp) + timeout_ms " +
-        "WHERE id=(SELECT id FROM tasks WHERE state_name = 'wait' AND queue_path = $1 LIMIT 1 FOR UPDATE SKIP LOCKED) " +
-        "RETURNING *",
-      values: [queue],
-    });
-    if (result.rows.length > 0) {
-      const msg = result.rows[0].msg;
+    const rows = await take(queue);
+    if (rows.length > 0) {
+      const msg = rows[0].msg;
       console.log("Taken one task from " + queue, msg);
       res.status(200).send(msg);
     } else {
       console.log("No tasks to take");
       res.status(204).send("0");
     }
+  })
+);
+
+app.get(
+  "/listen",
+  withErrorHandling(async function (req, res) {
+    const queue = ensureDefined(req.query.queue, "?queue");
+    const listenDurationMs = 10000;
+    const endAt = Date.now() + listenDurationMs;
+    while (Date.now() < endAt) {
+      const rows = await take(queue);
+      if (rows.length > 0) {
+        const msg = rows[0].msg;
+        console.log("Taken one task from " + queue, msg);
+        return res.status(200).send(msg);
+      }
+      sleep(250);
+    }
+    console.log("No tasks to take, finished listening");
+    return res.status(204).send("0");
   })
 );
 
@@ -100,12 +112,24 @@ app.get(
   })
 );
 
+async function take(queue) {
+  const result = await pool.query({
+    text:
+      "UPDATE tasks " +
+      "SET state_name = 'in_progress', " +
+      "in_progress_expire_at = extract(epoch from current_timestamp) * 1000 + extract(milliseconds from current_timestamp) + timeout_ms " +
+      "WHERE id=(SELECT id FROM tasks WHERE state_name = 'wait' AND queue_path = $1 LIMIT 1 FOR UPDATE SKIP LOCKED) " +
+      "RETURNING *",
+    values: [queue],
+  });
+  return result.rows;
+}
+
 async function returnTimeouts() {
   try {
     await pool.query(
       "UPDATE tasks SET state_name='wait', retry_no = retry_no + 1 WHERE state_name = 'in_progress' AND in_progress_expire_at < (extract(epoch from current_timestamp) * 1000)"
     );
-    console.log("Return timeouts executed");
   } catch (error) {
     console.error("Return timeouts failed");
     console.error(error);
@@ -138,4 +162,8 @@ function withErrorHandling(fHandler) {
       res.status(500).send({ error: err.message });
     }
   };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
