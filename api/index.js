@@ -27,17 +27,17 @@ app.post(
   "/add",
   withErrorHandling(async function (req, res) {
     const id = uuid();
+    console.log(req.query);
     const queue = ensureDefined(req.query.queue, "?queue");
     const timeoutMs = parseInt(
       ensureDefined(req.query.timeout_ms, "?timeout_ms")
     );
     const msg = ensureDefined(req.body, "POST body");
-    console.log("Adding", [id, queue, msg, timeoutMs]);
     await pool.query({
       text: "INSERT INTO tasks (id, queue_path, msg, timeout_ms) VALUES ($1, $2, $3, $4)",
       values: [id, queue, msg, timeoutMs],
     });
-    console.log("Adding done");
+    console.log("Added task to " + queue, { id, queue, msg, timeoutMs });
     res.status(200).send(id);
   })
 );
@@ -45,19 +45,7 @@ app.post(
 app.get(
   "/take",
   withErrorHandling(async function (req, res) {
-    console.log("Take initiated");
     const queue = ensureDefined(req.query.queue, "?queue");
-    /*
-UPDATE tasks
-SET    state_name = 'wait',
-WHERE  server_ip = (
-         SELECT server_ip
-         FROM   server_info
-         WHERE  status = 'standby'
-         LIMIT  1
-         FOR    UPDATE SKIP LOCKED
-         )
-    */
     const result = await pool.query({
       text:
         "UPDATE tasks " +
@@ -68,9 +56,12 @@ WHERE  server_ip = (
       values: [queue],
     });
     if (result.rows.length > 0) {
-      res.status(200).send(result.msg);
+      const msg = result.rows[0].msg;
+      console.log("Taken one task from " + queue, msg);
+      res.status(200).send(msg);
     } else {
-      res.status(204).send();
+      console.log("No tasks to take");
+      res.status(204).send("0");
     }
   })
 );
@@ -78,29 +69,41 @@ WHERE  server_ip = (
 app.get(
   "/ack",
   withErrorHandling(async function (req, res) {
-    const id = req.query.id;
-    await pool.query({
-      text: "UPDATE tasks SET state_name='done' WHERE id = $1",
+    console.log("Begin ack");
+    const id = ensureDefined(req.query.id, "?id");
+    const result = await pool.query({
+      text: "UPDATE tasks SET state_name='done' WHERE id = $1 RETURNING *",
       values: [id],
     });
+    if (result.rows.length === 0) {
+      res.status(410).send({ error: "No such task" });
+    } else {
+      res.status(200).send({ ok: true });
+    }
+    console.log("Ack done");
   })
 );
 
 app.get(
   "/nack",
   withErrorHandling(async function (req, res) {
-    const id = req.query.id;
-    await pool.query({
-      text: "UPDATE tasks SET state_name='failed' WHERE id = $1",
+    const id = ensureDefined(req.query.id, "?id");
+    const result = await pool.query({
+      text: "UPDATE tasks SET state_name='failed' WHERE id = $1 RETURNING *",
       values: [id],
     });
+    if (result.rows.length === 0) {
+      res.status(410).send({ error: "No such task" });
+    } else {
+      res.status(200).send({ ok: true });
+    }
   })
 );
 
 async function returnTimeouts() {
   try {
     await pool.query(
-      "UPDATE tasks SET state_name='wait', retry_no = retry_no + 1 WHERE state_name = 'in_progress' AND in_progress_expire_at < (extract(epoch from current_timestamp) * 1000 + extract(milliseconds from current_timestamp))"
+      "UPDATE tasks SET state_name='wait', retry_no = retry_no + 1 WHERE state_name = 'in_progress' AND in_progress_expire_at < (extract(epoch from current_timestamp) * 1000)"
     );
     console.log("Return timeouts executed");
   } catch (error) {
