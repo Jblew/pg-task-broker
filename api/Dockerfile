@@ -1,5 +1,6 @@
 FROM node:14
 
+ENV POSTGRES_HOST=localhost
 ENV POSTGRES_USER=postgres
 ENV POSTGRES_PASSWORD=pgpass
 ENV POSTGRES_DB=postgres
